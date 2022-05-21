@@ -5,6 +5,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Application } from '@midwayjs/koa';
 import { Context } from '@midwayjs/koa';
+import { isProduction } from '../util';
+import type { ViteDevServer, Plugin } from 'vite';
 
 @Provide()
 export class viteView implements IViewEngine {
@@ -31,26 +33,24 @@ export class viteView implements IViewEngine {
   ) {
     const vite = await createVite();
     try {
-      let template,
-        render,
-        manifest = {};
-      template = fs.readFileSync(indexName, 'utf-8');
+      // const context = {};
+      let manifest = {};
+      let template = fs.readFileSync(indexName, 'utf-8');
+      const render = await this.getRender(vite, entryServerUrl);
 
       if (!this.prod) {
         // always read fresh template in dev
         template = await vite.transformIndexHtml(url, template);
-        render = (await vite.ssrLoadModule(entryServerUrl)).render;
       } else {
         manifest = require(this.staticFileConfig.dirs.default.dir +
           '/html/ssr-manifest.json');
-        render = require(entryServerUrl).render;
       }
-      const context = {};
-      const [appHtml, preloadLinks] = await render(url, manifest, context);
-      if (context['url']) {
-        // Somewhere a `<Redirect>` was rendered
-        return this.ctx.redirect(context['url']);
-      }
+
+      const [appHtml, preloadLinks] = await render(url, manifest);
+      // if (context['url']) {
+      //   // Somewhere a `<Redirect>` was rendered
+      //   return this.ctx.redirect(context['url']);
+      // }
       let html = template
         .replace('<!--preload-links-->', preloadLinks)
         .replace('<!--app-html-->', appHtml)
@@ -98,9 +98,7 @@ export class viteView implements IViewEngine {
     if (this.viteViewConfig.prod !== undefined) {
       this.prod = this.viteViewConfig.prod;
     } else {
-      this.prod =
-        process.env.MIDWAY_SERVER_ENV === 'prod' ||
-        process.env.NODE_ENV === 'prod';
+      this.prod = isProduction(this.app);
     }
     locals.entry = locals.entry
       ? path.resolve(options.root, locals.entry)
@@ -125,5 +123,25 @@ export class viteView implements IViewEngine {
       ));
     }
     return (locals.ctx.body = await this.getClientHtml(tpl, locals['assign']));
+  }
+
+  private hasPlugin(plugins: readonly Plugin[] = [], name: string): boolean {
+    return !!plugins
+      .flat()
+      .find(plugin => (plugin.name || '').startsWith(name));
+  }
+
+  private async getRender(vite: ViteDevServer, entryServerUrl: string) {
+    if (!this.prod) return (await vite.ssrLoadModule(entryServerUrl)).render;
+    else {
+      const plugins = vite.config.plugins;
+      const isReact =
+        this.hasPlugin(plugins, 'vite:react') ||
+        this.hasPlugin(plugins, 'react-refresh');
+      const entryServerConfig = isReact
+        ? entryServerUrl.replace(/\.[jt]sx?$/, '.js')
+        : entryServerUrl;
+      return require(entryServerConfig).render;
+    }
   }
 }

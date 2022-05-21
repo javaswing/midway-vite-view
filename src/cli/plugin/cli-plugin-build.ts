@@ -4,6 +4,7 @@ import { loadConfigFromFile, build as buildVite } from 'vite';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as fsPromises from 'fs/promises';
+import { getCurrentEnvironment } from '../../util';
 
 //递归遍历文件并执行callback
 const fileDisplay = async function (
@@ -67,12 +68,7 @@ export class BuildPlugin extends BasePlugin {
     if (stat.isFile()) {
       configFiles = [this.options.configDir];
     } else {
-      let env = 'prod';
-      if (process.env.MIDWAY_SERVER_ENV) {
-        env = process.env.MIDWAY_SERVER_ENV;
-      } else if (process.env.NODE_ENV) {
-        env = process.env.NODE_ENV;
-      }
+      const env = getCurrentEnvironment();
       configFiles = [
         this.options.configDir + '/config.default.ts',
         this.options.configDir + `/config.${env}.ts`,

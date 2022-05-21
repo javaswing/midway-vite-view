@@ -1,5 +1,6 @@
-const { createServer: createViteServer } = require('vite');
-let vite;
+import { createServer as createViteServer } from 'vite';
+import type { ViteDevServer } from 'vite';
+let vite: ViteDevServer;
 export const createVite = async () => {
   if (!vite) {
     vite = await createViteServer({
