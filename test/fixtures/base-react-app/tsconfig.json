@@ -1,22 +1,23 @@
 {
-  "compileOnSave": true,
   "compilerOptions": {
-    "target": "ES2018",
-    "module": "commonjs",
+    "target": "esnext",
+    "module": "esnext",
     "moduleResolution": "node",
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "inlineSourceMap": true,
-    "noImplicitThis": true,
-    "noUnusedLocals": true,
-    "stripInternal": true,
-    "pretty": true,
-    "declaration": true,
-    "outDir": "dist"
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "jsx": "react",
+    "baseUrl": ".",
+    "types": [
+      "vite/client"
+    ],
+    "sourceMap": true,
+    "lib": [
+      "esnext",
+      "dom"
+    ]
   },
-  "exclude": [
-    "dist",
-    "node_modules",
-    "test"
-  ]
+  "include": [
+    "./**/*.ts"
+  ],
 }

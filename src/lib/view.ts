@@ -35,13 +35,13 @@ export class viteView implements IViewEngine {
     try {
       // const context = {};
       let manifest = {};
-      let template = fs.readFileSync(indexName, 'utf-8');
+      let template;
       const render = await this.getRender(vite, entryServerUrl);
-
       if (!this.prod) {
         // always read fresh template in dev
         template = await vite.transformIndexHtml(url, template);
       } else {
+        template = fs.readFileSync(indexName, 'utf-8');
         manifest = require(this.staticFileConfig.dirs.default.dir +
           '/html/ssr-manifest.json');
       }
