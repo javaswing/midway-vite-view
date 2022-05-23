@@ -14,6 +14,17 @@ export function isProduction(app) {
   );
 }
 
+export function get(object: any, path: string): any {
+  const keys = path.split('.');
+  let result = object;
+
+  keys.forEach(key => {
+    result = result[key] ?? '';
+  });
+
+  return result;
+}
+
 //递归遍历文件并执行callback
 export const fileDisplay = async function (
   filePath: string,

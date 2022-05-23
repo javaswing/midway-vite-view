@@ -29,11 +29,7 @@ describe('test/build.test.ts', () => {
       await remove(dist);
     }
     await run(cwd, 'build', {
-      configDir: join(cwd, 'src/config'),
-      root: join(cwd),
-      viewDir: join(cwd, 'view'),
-      outDir: join(cwd, 'public/html'),
-      viteConfigFile: join(cwd, 'vite.config.ts'),
+      viteConfigFile:'vite.config.ts',
     });
     assert(existsSync(join(dist, 'index.html')));
   })

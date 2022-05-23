@@ -1,38 +1,23 @@
 // eslint-disable-next-line node/no-extraneous-import
 import { BasePlugin } from '@midwayjs/command-core';
-import { loadConfigFromFile, build as buildVite } from 'vite';
+import { MidwayInvalidConfigError } from '@midwayjs/core';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as fsPromises from 'fs/promises';
-import { getCurrentEnvironment } from '../../util';
+import { isAbsolute, resolve } from 'path';
+import { build as buildVite, mergeConfig, resolveConfig } from 'vite';
+import { CommandOptions, ViteViewOptions } from '../../interface';
+import { fileDisplay, get, getCurrentEnvironment } from '../../util';
 
-//递归遍历文件并执行callback
-const fileDisplay = async function (
-  filePath: string,
-  callback: (fileName: string, filePath: string) => void
-) {
-  const files = await fsPromises.readdir(filePath);
-  for (let i = 0; i < files.length; i++) {
-    const filename = files[i];
-    //获取当前文件的绝对路径
-    const filedir = path.join(filePath, filename);
-    //根据文件路径获取文件信息，返回一个fs.Stats对象
-    const stats = fs.statSync(filedir);
-    if (stats.isFile()) {
-      await callback(filename, filedir);
-    } else if (stats.isDirectory()) {
-      await fileDisplay(filedir, callback); //递归，如果是文件夹，就继续遍历该文件夹下面的文件
-    }
-  }
-};
 export class BuildPlugin extends BasePlugin {
-  private config: any = {
+  private config = {
     clientIndex: [],
     entryServers: [],
-  };
+  } as ViteViewOptions;
+
   private midwayConfig: any = {};
-  private viteCofig: any = {};
-  private rootDir = process.cwd();
+  private viteConfig: any = {};
+  private rootDir = this.core.cwd;
+
   commands = {
     build: {
       lifecycleEvents: ['formatOptions', 'setFile', 'run'],
@@ -62,150 +47,145 @@ export class BuildPlugin extends BasePlugin {
     'build:setFile': this.setFile.bind(this),
     'build:run': this.run.bind(this),
   };
-  async getConfig() {
+
+  async loadMidwayConfig() {
     let configFiles;
-    const stat = await fs.statSync(this.options.configDir);
+    const stat = await fs.statSync(this.options.config);
     if (stat.isFile()) {
-      configFiles = [this.options.configDir];
+      configFiles = [this.options.config];
     } else {
       const env = getCurrentEnvironment();
       configFiles = [
-        this.options.configDir + '/config.default.ts',
-        this.options.configDir + `/config.${env}.ts`,
+        this.options.config + '/config.default.ts',
+        this.options.config + `/config.${env}.ts`,
       ].filter(file => fs.existsSync(file));
     }
     await Promise.all(
       configFiles.map(file => {
         return (async () => {
-          const { config: c } = await loadConfigFromFile(undefined, file);
+          const c = (await this.loadConfig(this.getDiskPath(file))) as any;
           this.midwayConfig = Object.assign(this.config, c);
         })();
       })
     );
-    this.options.outDir =
-      this.options.outDir ?? this.midwayConfig?.staticFile?.dirs?.default?.dir;
-    this.options.prefix =
-      this.options.prefix ??
-      (this.midwayConfig?.staticFile?.dirs?.default?.prefix || '/public') +
-        '/html/';
-    this.options.viteConfigFile =
-      this.options.viteConfigFile ??
-      this.midwayConfig?.viteView?.viteConfigFile;
   }
 
-  async getViteConfig() {
-    const { config } = await loadConfigFromFile(
-      undefined,
-      this.options.viteConfigFile || 'vite.config.js'
+  async formatOptions() {
+    const defaultCommandOptions = {
+      type: 1,
+      config: 'src/config',
+      outDir: 'public/html/',
+      viteConfigFile: 'vite.config.js',
+      viewDir: 'view',
+    } as CommandOptions;
+    this.options = Object.assign(defaultCommandOptions, this.options);
+
+    if (this.options.type === 1) {
+      try {
+        await this.loadMidwayConfig();
+      } catch (e) {
+        console.log(this.core.config);
+        console.error(
+          '解析midway配置失败你可以使用-t 2 用文件名匹配模式进行构建 j%',
+          e
+        );
+        throw e;
+      }
+    }
+    this.config = Object.assign(
+      this.config,
+      get(this.midwayConfig, 'viteView')
     );
-    this.viteCofig = config;
-    this.rootDir = this.viteCofig.root || this.rootDir;
+    await this.loadViteConfig();
+  }
+
+  async loadViteConfig() {
+    this.viteConfig = await resolveConfig(
+      { configFile: this.getDiskPath(this.options.viteConfigFile) },
+      'build'
+    );
+    console.log(this.viteConfig);
+    this.rootDir = this.viteConfig.root || this.core.cwd;
     if (
-      this.viteCofig.build &&
-      this.viteCofig.build.rollupOptions &&
-      this.viteCofig.build.rollupOptions.input
+      this.viteConfig.build &&
+      this.viteConfig.build.rollupOptions &&
+      this.viteConfig.build.rollupOptions.input
     ) {
       console.warn(
         'vite配置文件中指定了rollupOptions.input，打包时将应用此构建，如果不确定配置值是否正确，请删除build.rollupOptions.input配置'
       );
     }
   }
-  async formatOptions() {
-    if (!this.options.configDir) {
-      this.options.configDir = 'src/config';
-    }
-    if (!this.options.type) {
-      this.options.type = 1;
-    }
-    if (this.options.type === 1) {
-      try {
-        await this.getConfig();
-      } catch (e) {
-        console.error(
-          '解析midway配置失败你可以使用-t 2 用文件名匹配模式进行构建'
-        );
-        throw e;
-      }
-    }
-    if (!this.options.outDir) {
-      this.options.outDir = 'public/html';
-    }
-    this.options.outDir = path.resolve(process.cwd(), this.options.outDir);
-    if (!this.options.prefix) {
-      this.options.prefix = '/public/html/';
-    }
-    if (!this.options.viewDir) {
-      this.options.viewDir = 'view';
-    }
-    this.config = Object.assign(this.config, this.options);
-    await this.getViteConfig();
-  }
 
   async setFile() {
-    if (this.config.type === 1) {
-      this.setFileByConfig();
-    } else {
+    if (this.options.type === 2) {
       this.setFileByFileName();
     }
   }
 
   async run() {
     const input = [];
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    this.config.clientIndex.forEach((file, _key) => {
-      input.push(path.resolve(this.rootDir, file));
+    this.config.clientIndex.forEach(file => {
+      input.push(path.resolve(this.core.cwd, this.options.viewDir, file));
     });
-    await buildVite({
-      base: this.config.prefix,
-      publicDir: false,
-      configFile: this.config.viteConfigFile,
-      build: {
-        outDir: this.config.outDir,
-        ssrManifest: true,
-        rollupOptions: { input },
-        ssr: false,
-      },
-    });
+
+    const viteConfig = mergeConfig(
+      {},
+      {
+        root: this.getDiskPath(this.options.viewDir),
+        base: this.getDiskPath(this.options.outDir) + '/',
+        publicDir: false,
+        build: {
+          target: 'esnext',
+          minify: false,
+          ssrManifest: true,
+          outDir: this.getDiskPath(this.options.outDir),
+        },
+      }
+    );
+
+    // client build
+    this.core.cli.log('[vite-view] vite build client');
+    await buildVite(viteConfig);
     const content = fs.readFileSync(
-      this.config.outDir + '/ssr-manifest.json',
+      this.getDiskPath(this.options.outDir) + '/ssr-manifest.json',
       'utf8'
     );
     fs.writeFileSync(
-      this.config.outDir + '/ssr-manifest.json',
+      this.getDiskPath(this.options.outDir) + '/ssr-manifest.json',
       content.replace(
-        new RegExp('"/' + (this.viteCofig.build?.assetsDir || 'assets'), 'g'),
-        '"' + this.config.prefix + (this.viteCofig.build?.assetsDir || 'assets')
+        new RegExp('"/' + (this.viteConfig.build?.assetsDir || 'assets'), 'g'),
+        '"' +
+          this.options.outDir +
+          '/html' +
+          (this.viteConfig.build?.assetsDir || 'assets')
       )
     );
+
+    // server build
+    this.core.cli.log('[vite-view] vite build server');
     if (this.config.entryServers.length) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      this.config.entryServers.forEach(async (file, _key) => {
+      for (const file of this.config.entryServers) {
         const fileName = path.resolve(this.rootDir, file);
-        // input[fileName.substring(this.rootDir.length+1).slice(0,-path.extname(file).length)] = file;
         await buildVite({
-          base: this.config.prefix,
+          root: this.getDiskPath(this.options.viewDir),
+          base: this.getDiskPath(this.options.outDir) + '/',
           publicDir: false,
-          configFile: this.config.viteConfigFile,
           build: {
+            target: 'esnext',
             emptyOutDir: false,
             outDir:
-              this.config.outDir +
+              this.getDiskPath(this.options.outDir) +
               '/' +
               fileName
                 .substring(this.rootDir.length + 1)
                 .slice(0, -path.basename(file).length),
             ssrManifest: false,
-            // rollupOptions:{input},
             ssr: file,
           },
         });
-      });
+      }
     }
-  }
-
-  async setFileByConfig() {
-    this.config.clientIndex = this.midwayConfig.viteView.clientIndex;
-    this.config.entryServers = this.midwayConfig.viteView?.entryServers || [];
   }
 
   async setFileByFileName() {
@@ -216,5 +196,30 @@ export class BuildPlugin extends BasePlugin {
         this.config.entryServers.push(filePath);
       }
     });
+  }
+
+  private loadConfig(
+    configFilename
+  ): (...args) => any | Record<string, unknown> {
+    let exports =
+      typeof configFilename === 'string'
+        ? require(configFilename)
+        : configFilename;
+
+    if (exports && exports.default) {
+      if (Object.keys(exports).length > 1) {
+        throw new MidwayInvalidConfigError(
+          `${configFilename} should not have both a default export and named export`
+        );
+      }
+      exports = exports.default;
+    }
+
+    return exports;
+  }
+
+  private getDiskPath(path: string) {
+    if (isAbsolute(path)) return path;
+    return resolve(this.core.cwd, path);
   }
 }
