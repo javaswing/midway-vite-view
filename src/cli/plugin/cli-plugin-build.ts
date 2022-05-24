@@ -4,7 +4,7 @@ import { MidwayInvalidConfigError } from '@midwayjs/core';
 import * as fs from 'fs';
 import * as path from 'path';
 import { isAbsolute, resolve } from 'path';
-import { build as buildVite, mergeConfig, resolveConfig } from 'vite';
+import { build as buildVite, resolveConfig } from 'vite';
 import { CommandOptions, ViteViewOptions } from '../../interface';
 import { fileDisplay, get, getCurrentEnvironment } from '../../util';
 
@@ -78,7 +78,14 @@ export class BuildPlugin extends BasePlugin {
       viteConfigFile: 'vite.config.js',
       viewDir: 'view',
     } as CommandOptions;
-    this.options = Object.assign(defaultCommandOptions, this.options);
+    this.options = Object.assign({}, defaultCommandOptions, this.options);
+
+    // set absolute path
+    Object.keys(this.options).forEach(key => {
+      if (['config', 'outDir', 'viteConfigFile', 'viewDir'].includes(key)) {
+        this.options[key] = this.getDiskPath(this.options[key]);
+      }
+    });
 
     if (this.options.type === 1) {
       try {
@@ -101,10 +108,9 @@ export class BuildPlugin extends BasePlugin {
 
   async loadViteConfig() {
     this.viteConfig = await resolveConfig(
-      { configFile: this.getDiskPath(this.options.viteConfigFile) },
+      { configFile: this.options.viteConfigFile },
       'build'
     );
-    console.log(this.viteConfig);
     this.rootDir = this.viteConfig.root || this.core.cwd;
     if (
       this.viteConfig.build &&
@@ -129,30 +135,26 @@ export class BuildPlugin extends BasePlugin {
       input.push(path.resolve(this.core.cwd, this.options.viewDir, file));
     });
 
-    const viteConfig = mergeConfig(
-      {},
-      {
-        root: this.getDiskPath(this.options.viewDir),
-        base: this.getDiskPath(this.options.outDir) + '/',
-        publicDir: false,
-        build: {
-          target: 'esnext',
-          minify: false,
-          ssrManifest: true,
-          outDir: this.getDiskPath(this.options.outDir),
-        },
-      }
-    );
-
     // client build
     this.core.cli.log('[vite-view] vite build client');
-    await buildVite(viteConfig);
+    await buildVite({
+      root: this.options.viewDir,
+      base: this.options.outDir + '/',
+      publicDir: false,
+      build: {
+        target: 'esnext',
+        minify: false,
+        ssrManifest: true,
+        outDir: this.options.outDir,
+      },
+    });
+
     const content = fs.readFileSync(
-      this.getDiskPath(this.options.outDir) + '/ssr-manifest.json',
+      this.options.outDir + '/ssr-manifest.json',
       'utf8'
     );
     fs.writeFileSync(
-      this.getDiskPath(this.options.outDir) + '/ssr-manifest.json',
+      this.options.outDir + '/ssr-manifest.json',
       content.replace(
         new RegExp('"/' + (this.viteConfig.build?.assetsDir || 'assets'), 'g'),
         '"' +
@@ -167,19 +169,18 @@ export class BuildPlugin extends BasePlugin {
     if (this.config.entryServers.length) {
       for (const file of this.config.entryServers) {
         const fileName = path.resolve(this.rootDir, file);
+        const folder = fileName
+          .substring(this.rootDir.length + 1)
+          .slice(0, -path.basename(file).length);
+
         await buildVite({
-          root: this.getDiskPath(this.options.viewDir),
-          base: this.getDiskPath(this.options.outDir) + '/',
+          root: this.options.viewDir,
+          base: this.options.outDir + '/',
           publicDir: false,
           build: {
             target: 'esnext',
             emptyOutDir: false,
-            outDir:
-              this.getDiskPath(this.options.outDir) +
-              '/' +
-              fileName
-                .substring(this.rootDir.length + 1)
-                .slice(0, -path.basename(file).length),
+            outDir: this.options.outDir + '/' + folder,
             ssrManifest: false,
             ssr: file,
           },
