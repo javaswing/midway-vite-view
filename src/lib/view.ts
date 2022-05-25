@@ -1,12 +1,11 @@
-import { Provide, Config, App, Inject } from '@midwayjs/decorator';
+import { App, Config, Inject, Provide } from '@midwayjs/decorator';
+import { Application, Context } from '@midwayjs/koa';
 import { IViewEngine, RenderOptions } from '@midwayjs/view';
-import { createVite } from '../vite';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Application } from '@midwayjs/koa';
-import { Context } from '@midwayjs/koa';
+import type { ViteDevServer } from 'vite';
 import { isProduction } from '../util';
-import type { ViteDevServer, Plugin } from 'vite';
+import { createVite } from '../vite';
 
 @Provide()
 export class viteView implements IViewEngine {
@@ -33,7 +32,6 @@ export class viteView implements IViewEngine {
   ) {
     const vite = await createVite();
     try {
-      // const context = {};
       let manifest = {};
       let template;
       const render = await this.getRender(vite, entryServerUrl);
@@ -47,10 +45,6 @@ export class viteView implements IViewEngine {
       }
 
       const [appHtml, preloadLinks] = await render(url, manifest);
-      // if (context['url']) {
-      //   // Somewhere a `<Redirect>` was rendered
-      //   return this.ctx.redirect(context['url']);
-      // }
       let html = template
         .replace('<!--preload-links-->', preloadLinks)
         .replace('<!--app-html-->', appHtml)
@@ -100,6 +94,7 @@ export class viteView implements IViewEngine {
     } else {
       this.prod = isProduction(this.app);
     }
+
     locals.entry = locals.entry
       ? path.resolve(options.root, locals.entry)
       : undefined;
@@ -125,22 +120,20 @@ export class viteView implements IViewEngine {
     return (locals.ctx.body = await this.getClientHtml(tpl, locals['assign']));
   }
 
-  private hasPlugin(plugins: readonly Plugin[] = [], name: string): boolean {
-    return !!plugins
-      .flat()
-      .find(plugin => (plugin.name || '').startsWith(name));
-  }
+  // private hasPlugin(plugins: readonly Plugin[] = [], name: string): boolean {
+  //   return !!plugins
+  //     .flat()
+  //     .find(plugin => (plugin.name || '').startsWith(name));
+  // }
 
   private async getRender(vite: ViteDevServer, entryServerUrl: string) {
     if (!this.prod) return (await vite.ssrLoadModule(entryServerUrl)).render;
     else {
-      const plugins = vite.config.plugins;
-      const isReact =
-        this.hasPlugin(plugins, 'vite:react') ||
-        this.hasPlugin(plugins, 'react-refresh');
-      const entryServerConfig = isReact
-        ? entryServerUrl.replace(/\.[jt]sx?$/, '.js')
-        : entryServerUrl;
+      // const plugins = vite.config.plugins;
+      // const isReact =
+      //   this.hasPlugin(plugins, 'vite:react') ||
+      //   this.hasPlugin(plugins, 'react-refresh');
+      const entryServerConfig = entryServerUrl.replace(/\.[jt]sx$/, '.js');
       return require(entryServerConfig).render;
     }
   }
