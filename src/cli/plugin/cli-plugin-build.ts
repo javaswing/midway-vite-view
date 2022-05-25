@@ -16,7 +16,8 @@ export class BuildPlugin extends BasePlugin {
 
   private midwayConfig: any = {};
   private viteConfig: any = {};
-  private rootDir = this.core.cwd;
+
+  protected rootDir = this.core.cwd;
 
   commands = {
     build: {
@@ -145,34 +146,14 @@ export class BuildPlugin extends BasePlugin {
         target: 'esnext',
         minify: false,
         ssrManifest: true,
-        outDir: this.options.outDir,
+        outDir: this.options.outDir + '/client',
       },
     });
-
-    const content = fs.readFileSync(
-      this.options.outDir + '/ssr-manifest.json',
-      'utf8'
-    );
-    fs.writeFileSync(
-      this.options.outDir + '/ssr-manifest.json',
-      content.replace(
-        new RegExp('"/' + (this.viteConfig.build?.assetsDir || 'assets'), 'g'),
-        '"' +
-          this.options.outDir +
-          '/html' +
-          (this.viteConfig.build?.assetsDir || 'assets')
-      )
-    );
 
     // server build
     this.core.cli.log('[vite-view] vite build server');
     if (this.config.entryServers.length) {
       for (const file of this.config.entryServers) {
-        const fileName = path.resolve(this.rootDir, file);
-        const folder = fileName
-          .substring(this.rootDir.length + 1)
-          .slice(0, -path.basename(file).length);
-
         await buildVite({
           root: this.options.viewDir,
           base: this.options.outDir + '/',
@@ -180,7 +161,7 @@ export class BuildPlugin extends BasePlugin {
           build: {
             target: 'esnext',
             emptyOutDir: false,
-            outDir: this.options.outDir + '/' + folder,
+            outDir: this.options.outDir + '/server',
             ssrManifest: false,
             ssr: file,
           },

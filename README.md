@@ -94,7 +94,7 @@ import * as viteView from 'midway-vite-view';//引入view组件
 | ---------- | ----------- |----------- |
 |type | 1 | 构建方式:1=根据配置文件自动构建，2=自动寻找viewDir文件夹下的index.html和entry-server.js进行构建|
 |config|src/config|midway配置文件夹/配置文件|
-|outDir|public|编译输出目录|
+|outDir|public/html|编译输出目录|
 |viteConfigFile|命令根目录 vite.config.js|vite 配置文件 |
 |viewDir|view|视图文件夹 仅在type2模式下使用|
 

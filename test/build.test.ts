@@ -24,7 +24,7 @@ const run = async (cwd: string, command: string, options = {}) => {
 const cwd = join(__dirname, 'fixtures/base-react-app');
 describe('test/build.test.ts', () => {
   it('build', async () => {
-    const dist = join(cwd, 'public/html');
+    const dist = join(cwd, 'public/html/client');
     if (existsSync(dist)) {
       await remove(dist);
     }
